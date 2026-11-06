@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# 编辑结果和个人练习图片不提交；examples 中保留小型演示图片。
+results/
+my_images/
+*.egg-info/
+dist/
+build/
