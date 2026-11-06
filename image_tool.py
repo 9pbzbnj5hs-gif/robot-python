@@ -30,6 +30,8 @@ def resize_image(image, width=None, height=None):
         raise ImageToolError("缩放时至少指定 --width 或 --height 中的一项。")
     if (width is not None and width <= 0) or (height is not None and height <= 0):
         raise ImageToolError("宽高必须大于 0。")
+    if (width is not None and width > MAX_OUTPUT_PIXELS) or (height is not None and height > MAX_OUTPUT_PIXELS):
+        raise ImageToolError("缩放尺寸过大，请减小宽高。")
     # 像素数只能取整数；窄边至少保留 1 像素。
     if width is None:
         width = max(1, round(image.width * height / image.height))
