@@ -53,16 +53,40 @@ def crop_image(image, box):
     return image.crop((left, top, right, bottom))
 
 
-def save_result(image, source, output, operation):
+def rotate_image(image, degrees):
+    """按逆时针方向旋转，90°/270° 时宽高互换。"""
+    rotations = {
+        90: Image.Transpose.ROTATE_90,
+        180: Image.Transpose.ROTATE_180,
+        270: Image.Transpose.ROTATE_270,
+    }
+    if degrees not in rotations:
+        raise ImageToolError("旋转角度只能为 90、180 或 270。")
+    return image.transpose(rotations[degrees])
+
+
+def flip_image(image, direction):
+    if direction == "horizontal":
+        return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if direction == "vertical":
+        return image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    raise ImageToolError("翻转方向只能为 horizontal（水平）或 vertical（垂直）。")
+
+
+def grayscale_image(image):
+    return image.convert("L")
+
+
+def save_result(image, source, output, operation, extension=".png"):
     """以独占创建方式写入：即使存在同名文件，也不会覆盖。"""
     if output:
         target = Path(output).expanduser().resolve()
     else:
         directory = Path.cwd() / "results"
-        target = directory / f"{Path(source).stem}_{operation}.png"
+        target = directory / f"{Path(source).stem}_{operation}{extension}"
         number = 1
         while target.exists():
-            target = directory / f"{Path(source).stem}_{operation}_{number}.png"
+            target = directory / f"{Path(source).stem}_{operation}_{number}{extension}"
             number += 1
     if target.resolve() == Path(source).resolve():
         raise ImageToolError("输出路径不能与原图相同，请指定新文件。")
@@ -140,7 +164,36 @@ def build_parser():
     crop.add_argument("--box", nargs=4, type=int, required=True,
                       metavar=("LEFT", "TOP", "RIGHT", "BOTTOM"), help="左 上 右 下")
     crop.add_argument("-o", "--output", help="新文件路径，默认保存到 results")
+    rotate = commands.add_parser("rotate", help="逆时针旋转 90、180 或 270 度")
+    rotate.add_argument("input", help="输入图片路径")
+    rotate.add_argument("--degrees", type=int, choices=(90, 180, 270), required=True)
+    rotate.add_argument("-o", "--output", help="新文件路径，默认保存到 results")
+    flip = commands.add_parser("flip", help="水平或垂直翻转")
+    flip.add_argument("input", help="输入图片路径")
+    flip.add_argument("--direction", choices=("horizontal", "vertical"), required=True)
+    flip.add_argument("-o", "--output", help="新文件路径，默认保存到 results")
+    gray = commands.add_parser("gray", help="转换为灰度图")
+    gray.add_argument("input", help="输入图片路径")
+    gray.add_argument("-o", "--output", help="新文件路径，默认保存到 results")
+    convert = commands.add_parser("convert", help="转换为 PNG 或 JPG（JPEG 使用白色背景）")
+    convert.add_argument("input", help="输入图片路径")
+    convert.add_argument("--format", choices=("png", "jpg", "jpeg"), required=True)
+    convert.add_argument("-o", "--output", help="新文件路径，扩展名必须与 --format 一致")
     return parser
+
+
+def edit_image(image, args):
+    if args.command == "resize":
+        return resize_image(image, args.width, args.height)
+    if args.command == "crop":
+        return crop_image(image, args.box)
+    if args.command == "rotate":
+        return rotate_image(image, args.degrees)
+    if args.command == "flip":
+        return flip_image(image, args.direction)
+    if args.command == "gray":
+        return grayscale_image(image)
+    return image.copy()  # convert 的格式转换在保存时完成。
 
 
 def main(argv=None):
@@ -151,12 +204,14 @@ def main(argv=None):
             if args.command == "info":
                 print(image_info(args.input, image))
             else:
-                if args.command == "resize":
-                    result = resize_image(image, args.width, args.height)
-                else:
-                    result = crop_image(image, args.box)
-                with result:
-                    path = save_result(result, args.input, args.output, args.command)
+                extension = ".png"
+                if args.command == "convert":
+                    extension = ".png" if args.format == "png" else ".jpg"
+                    allowed = (".png",) if extension == ".png" else (".jpg", ".jpeg")
+                    if args.output and Path(args.output).suffix.lower() not in allowed:
+                        raise ImageToolError("输出文件扩展名与 --format 不一致。")
+                with edit_image(image, args) as result:
+                    path = save_result(result, args.input, args.output, args.command, extension)
                     print(f"处理完成：{result.width} × {result.height} 像素")
                     print(f"保存位置：{path}")
         return 0
